@@ -3,10 +3,11 @@ import json
 
 def test_genshield_audit_safe(direct_vm, direct_deploy, direct_alice):
     # Deploy GenShield with min_fee = 1000
-    genshield = direct_deploy("contracts/genshield.py", args=[1000])
+    genshield = direct_deploy("contracts/genshield.py", 1000)
+    from genlayer import Address
     
     # Check min fee view
-    assert genshield.get_min_fee().call() == 1000
+    assert genshield.get_min_fee() == 1000
 
     # Mock the LLM response to return a safe audit result
     mock_response = {
@@ -34,18 +35,18 @@ def test_genshield_audit_safe(direct_vm, direct_deploy, direct_alice):
     code_hash = genshield.submit_audit("DummyContract", target_code)
     
     # Verify certificate is saved
-    cert = genshield.get_certificate(code_hash).call()
+    cert = genshield.get_certificate(code_hash)
     assert cert["is_safe"] is True
     assert cert["contract_name"] == "DummyContract"
     assert cert["score"] == 95
-    assert cert["auditor"] == str(direct_alice)
+    assert cert["auditor"] == Address(direct_alice).as_hex
     assert len(cert["timestamp"]) > 0
 
     # Reset mocks
     direct_vm.clear_mocks()
 
 def test_genshield_audit_unsafe(direct_vm, direct_deploy, direct_alice):
-    genshield = direct_deploy("contracts/genshield.py", args=[1000])
+    genshield = direct_deploy("contracts/genshield.py", 1000)
     
     # Mock the LLM response to return an unsafe audit result
     mock_response = {
@@ -69,13 +70,13 @@ def test_genshield_audit_unsafe(direct_vm, direct_deploy, direct_alice):
     code_hash = genshield.submit_audit("UnsafeContract", unsafe_code)
     
     # Verify no certificate is registered because is_safe is False
-    cert = genshield.get_certificate(code_hash).call()
+    cert = genshield.get_certificate(code_hash)
     assert cert == {}
 
     direct_vm.clear_mocks()
 
 def test_genshield_insufficient_payment(direct_vm, direct_deploy, direct_alice):
-    genshield = direct_deploy("contracts/genshield.py", args=[1000])
+    genshield = direct_deploy("contracts/genshield.py", 1000)
     
     direct_vm.sender = direct_alice
     direct_vm.value = 500  # Less than min_fee of 1000
