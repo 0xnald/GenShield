@@ -15,6 +15,7 @@ class AuditCertificate:
     score: u32
     is_safe: bool
     timestamp: str
+    vulnerabilities_json: str
 
 class GenShield(gl.Contract):
     certificates: TreeMap[str, AuditCertificate]
@@ -57,7 +58,7 @@ class GenShield(gl.Contract):
         {{
             "is_safe": true/false,
             "vulnerabilities": [
-                {{"type": "category", "description": "detail", "severity": "high/medium/low", "line": 12}}
+                {{"type": "category", "description": "detail", "severity": "high/medium/low", "line": 12, "suggested_fix": "suggested fix explanation and code snippet"}}
             ],
             "score": 0 to 100
         }}
@@ -101,16 +102,16 @@ class GenShield(gl.Contract):
         
         now = datetime.now(timezone.utc).isoformat()
         
-        if result.get("is_safe", False):
-            cert = AuditCertificate(
-                contract_name=contract_name,
-                code_hash=code_hash,
-                auditor=gl.message.sender_address,
-                score=u32(int(result.get("score", 0))),
-                is_safe=True,
-                timestamp=now
-            )
-            self.certificates[code_hash] = cert
+        cert = AuditCertificate(
+            contract_name=contract_name,
+            code_hash=code_hash,
+            auditor=gl.message.sender_address,
+            score=u32(int(result.get("score", 0))),
+            is_safe=bool(result.get("is_safe", False)),
+            timestamp=now,
+            vulnerabilities_json=json.dumps(result.get("vulnerabilities", []))
+        )
+        self.certificates[code_hash] = cert
             
         return code_hash
 
@@ -125,7 +126,8 @@ class GenShield(gl.Contract):
             "auditor": str(cert.auditor),
             "score": int(cert.score),
             "is_safe": cert.is_safe,
-            "timestamp": cert.timestamp
+            "timestamp": cert.timestamp,
+            "vulnerabilities_json": cert.vulnerabilities_json
         }
 
     @gl.public.view

@@ -6,7 +6,7 @@ import { useAccount } from 'wagmi';
 import { 
   Play, Key, Wallet, Terminal, 
   FileCode, Award, Shield, CheckCircle, 
-  ArrowUpRight
+  ArrowUpRight, AlertTriangle
 } from 'lucide-react';
 
 const SAMPLE_CODE = `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
@@ -28,7 +28,7 @@ class MyContract(gl.Contract):
 `;
 
 // Hidden contract address loaded from env or default Studionet address
-const CONTRACT_ADDRESS = import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x5006f4C1d2201FF849EF0A1C664F4Ede300edbB2';
+const CONTRACT_ADDRESS = import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x69E895F178CdF05b3C70e97289f31e3E79A9E4Ef';
 
 function App() {
   const { address: connectedWalletAddress, isConnected, connector } = useAccount();
@@ -172,11 +172,15 @@ function App() {
         args: [codeHash]
       });
 
-      if (cert && cert.is_safe) {
-        addLog("Certificate retrieved successfully! Contract code is verified SAFE.", "success");
+      if (cert && cert.contract_name) {
         setCertificate(cert);
+        if (cert.is_safe) {
+          addLog("Certificate retrieved successfully! Contract code is verified SAFE.", "success");
+        } else {
+          addLog("Certificate retrieved! Contract code was rejected/marked UNSAFE by validators.", "error");
+        }
       } else {
-        addLog("Audit transaction completed, but no safe certificate was registered. Code was rejected or marked unsafe by validators.", "error");
+        addLog("Audit transaction completed, but no certificate registry was found.", "error");
       }
 
     } catch (err) {
@@ -186,6 +190,17 @@ function App() {
       setIsAuditing(false);
     }
   };
+
+  // Parse vulnerabilities list and safety state from the on-chain certificate
+  let vulnerabilities = [];
+  try {
+    if (certificate && certificate.vulnerabilities_json) {
+      vulnerabilities = JSON.parse(certificate.vulnerabilities_json);
+    }
+  } catch (e) {
+    console.error("Failed to parse vulnerabilities:", e);
+  }
+  const isSafe = certificate ? certificate.is_safe : false;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
@@ -379,14 +394,33 @@ function App() {
             </div>
 
             {certificate ? (
-              <div className="certificate-card">
+              <div 
+                className={`certificate-card ${isSafe ? 'safe' : 'unsafe'}`}
+                style={{
+                  border: isSafe ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.3)',
+                  boxShadow: isSafe ? 'var(--shadow-glow-green)' : '0 0 25px rgba(239, 68, 68, 0.15)',
+                  background: isSafe 
+                    ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(0, 102, 255, 0.04))' 
+                    : 'linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(245, 158, 11, 0.04))',
+                  animation: isSafe ? 'border-pulse 2s infinite alternate' : 'none'
+                }}
+              >
                 <div className="certificate-header">
-                  <div className="certificate-badge-icon">
-                    <Shield size={24} />
+                  <div 
+                    className="certificate-badge-icon"
+                    style={{
+                      background: isSafe ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      color: isSafe ? 'var(--accent-green)' : 'var(--accent-red)',
+                      boxShadow: isSafe ? '0 0 10px rgba(16, 185, 129, 0.25)' : '0 0 10px rgba(239, 68, 68, 0.25)'
+                    }}
+                  >
+                    {isSafe ? <Shield size={24} /> : <AlertTriangle size={24} />}
                   </div>
                   <div className="certificate-title-box">
-                    <h3>On-Chain Security Certificate</h3>
-                    <p>VERIFIED SECURE BY CONSENSUS</p>
+                    <h3 style={{ color: isSafe ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                      {isSafe ? "On-Chain Security Certificate" : "Audit Consensus Failed"}
+                    </h3>
+                    <p>{isSafe ? "VERIFIED SECURE BY CONSENSUS" : "REJECTED / MARKED UNSAFE"}</p>
                   </div>
                 </div>
 
@@ -425,8 +459,52 @@ function App() {
 
                   <div className="certificate-score">
                     <span className="score-label">Decentralized Security Rating</span>
-                    <span className="score-value">{certificate.score}/100</span>
+                    <span 
+                      className="score-value"
+                      style={{
+                        color: isSafe ? 'var(--accent-green)' : 'var(--accent-red)',
+                        textShadow: isSafe ? '0 0 8px rgba(16, 185, 129, 0.35)' : '0 0 8px rgba(239, 68, 68, 0.35)'
+                      }}
+                    >
+                      {certificate.score}/100
+                    </span>
                   </div>
+
+                  {/* Render vulnerabilities and suggested fixes */}
+                  {vulnerabilities.length > 0 && (
+                    <div style={{ marginTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '14px', gridColumn: 'span 2' }}>
+                      <h4 style={{ fontSize: '13px', textTransform: 'uppercase', color: 'var(--accent-red)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <AlertTriangle size={14} /> Detected Vulnerabilities ({vulnerabilities.length})
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {vulnerabilities.map((vuln, i) => (
+                          <div key={i} style={{ background: 'rgba(239, 68, 68, 0.04)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '12px', padding: '14px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                              <span style={{ fontWeight: '600', color: '#ff8080', textTransform: 'uppercase', fontSize: '11px' }}>
+                                {vuln.type ? vuln.type.replace('_', ' ') : 'Vulnerability'}
+                              </span>
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                {vuln.line && <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>Line {vuln.line}</span>}
+                                <span style={{ background: vuln.severity === 'high' ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)', color: vuln.severity === 'high' ? '#ff8080' : '#f59e0b', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold' }}>
+                                  {vuln.severity}
+                                </span>
+                              </div>
+                            </div>
+                            <p style={{ color: 'var(--text-primary)', marginBottom: '8px', lineHeight: '1.4' }}>{vuln.description}</p>
+                            {vuln.suggested_fix && (
+                              <div style={{ marginTop: '8px', background: 'rgba(0,0,0,0.3)', borderLeft: '3px solid var(--accent-blue)', padding: '8px', borderRadius: '4px' }}>
+                                <strong style={{ display: 'block', fontSize: '10px', textTransform: 'uppercase', color: 'var(--accent-blue)', marginBottom: '4px' }}>Suggested Correct Fix:</strong>
+                                <code style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#80b3ff', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                  {vuln.suggested_fix}
+                                </code>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>

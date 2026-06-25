@@ -69,9 +69,16 @@ def test_genshield_audit_unsafe(direct_vm, direct_deploy, direct_alice):
 
     code_hash = genshield.submit_audit("UnsafeContract", unsafe_code)
     
-    # Verify no certificate is registered because is_safe is False
+    # Verify certificate is registered but is_safe is False
     cert = genshield.get_certificate(code_hash)
-    assert cert == {}
+    assert cert != {}
+    assert cert["is_safe"] is False
+    assert cert["score"] == 20
+    assert cert["contract_name"] == "UnsafeContract"
+    vulnerabilities = json.loads(cert["vulnerabilities_json"])
+    assert len(vulnerabilities) == 1
+    assert vulnerabilities[0]["type"] == "forbidden_import"
+    assert vulnerabilities[0]["severity"] == "high"
 
     direct_vm.clear_mocks()
 
