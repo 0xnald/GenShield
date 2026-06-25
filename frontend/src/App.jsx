@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient, createAccount } from 'genlayer-js';
 import { studionet } from 'genlayer-js/chains';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount } from 'wagmi';
 import { 
-  Shield, Play, Key, Wallet, Terminal, 
-  FileCode, Award, AlertCircle, CheckCircle, 
-  RefreshCw, ClipboardCheck, ArrowUpRight
+  Play, Key, Wallet, Terminal, 
+  FileCode, Award, Shield, CheckCircle, 
+  ArrowUpRight
 } from 'lucide-react';
 
 const SAMPLE_CODE = `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
@@ -25,11 +27,13 @@ class MyContract(gl.Contract):
         return self.value
 `;
 
+// Hidden contract address loaded from env or default Studionet address
+const CONTRACT_ADDRESS = import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x5006f4C1d2201FF849EF0A1C664F4Ede300edbB2';
+
 function App() {
+  const { address: connectedWalletAddress, isConnected, connector } = useAccount();
   const [connectionType, setConnectionType] = useState('wallet');
-  const [walletAddress, setWalletAddress] = useState('');
   const [privateKey, setPrivateKey] = useState('');
-  const [contractAddress, setContractAddress] = useState('0x5006f4C1d2201FF849EF0A1C664F4Ede300edbB2');
   const [contractName, setContractName] = useState('MySmartContract');
   const [code, setCode] = useState(SAMPLE_CODE);
   const [logs, setLogs] = useState([]);
@@ -56,28 +60,7 @@ function App() {
     setLogs(prev => [...prev, { text, type, time }]);
   };
 
-  const connectWallet = async () => {
-    if (!window.ethereum) {
-      addLog("Wallet connection failed: MetaMask/Rabby not detected", "error");
-      alert("Please install an EVM-compatible browser wallet like MetaMask or Rabby first.");
-      return;
-    }
-    try {
-      addLog("Requesting wallet connection...", "info");
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      setWalletAddress(accounts[0]);
-      addLog(`Wallet connected: ${accounts[0]}`, "success");
-    } catch (err) {
-      addLog(`Wallet connection error: ${err.message}`, "error");
-    }
-  };
-
   const handleAudit = async () => {
-    if (!contractAddress) {
-      alert("Please enter the GenShield contract address.");
-      return;
-    }
-    
     setIsAuditing(true);
     setLogs([]);
     setCertificate(null);
@@ -88,27 +71,23 @@ function App() {
       let client;
       
       if (connectionType === 'wallet') {
-        if (!walletAddress) {
-          addLog("Wallet is not connected. Attempting auto-connection...", "warning");
-          if (!window.ethereum) {
-            throw new Error("No browser wallet extension found.");
-          }
-          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-          setWalletAddress(accounts[0]);
+        if (!isConnected || !connector) {
+          throw new Error("No wallet connected. Please connect your wallet using the button in the header.");
         }
         
-        addLog(`Creating GenLayer client using injected provider (wallet: ${walletAddress || 'pending'})...`, "info");
+        addLog(`Fetching wallet provider for signer: ${connectedWalletAddress}...`, "info");
+        const provider = await connector.getProvider();
+        
         client = createClient({
           chain: studionet,
-          account: walletAddress || window.ethereum.selectedAddress,
-          provider: window.ethereum
+          account: connectedWalletAddress,
+          provider: provider
         });
       } else {
         if (!privateKey) {
-          throw new Error("Please enter a private key hex to sign transaction.");
+          throw new Error("Please enter a private key hex to sign the audit transaction.");
         }
         
-        // Ensure private key has 0x prefix if required, or validate it
         let cleanKey = privateKey.trim();
         if (!cleanKey.startsWith('0x') && cleanKey.length === 64) {
           cleanKey = '0x' + cleanKey;
@@ -124,7 +103,7 @@ function App() {
         });
       }
 
-      addLog(`Preparing to call 'submit_audit' on contract: ${contractAddress}`, "info");
+      addLog("Preparing to call 'submit_audit' on contract...", "info");
       
       // Calculate SHA-256 locally to log it
       const encoder = new TextEncoder();
@@ -138,7 +117,7 @@ function App() {
       addLog(`Submitting transaction with paid fee value: ${fee.toString()} Wei`, "info");
       
       const txHash = await client.writeContract({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         functionName: "submit_audit",
         args: [contractName, code],
         value: fee
@@ -153,12 +132,11 @@ function App() {
 
       addLog("Fetching Verifiable Security Certificate from contract storage...", "info");
       const cert = await client.readContract({
-        address: contractAddress,
+        address: CONTRACT_ADDRESS,
         functionName: "get_certificate",
         args: [codeHash]
       });
 
-      // PythonTreeMap representation might return an empty dict/object if not found
       if (cert && cert.is_safe) {
         addLog("Certificate retrieved successfully! Contract code is verified SAFE.", "success");
         setCertificate(cert);
@@ -179,17 +157,21 @@ function App() {
       {/* App Header */}
       <header className="app-header">
         <div className="brand">
-          <Shield className="brand-icon" size={32} />
+          <img src="/logo.png" alt="GenShield Logo" className="brand-logo" />
           <div>
             <h1>GenShield</h1>
             <div className="brand-tagline">On-Chain Intelligent Auditor</div>
           </div>
         </div>
         <div className="header-actions">
-          <div className="network-badge">
-            <span className="network-dot"></span>
-            Studionet
-          </div>
+          <ConnectButton 
+            showBalance={false}
+            chainStatus="none"
+            accountStatus={{
+              smallScreen: 'avatar',
+              largeScreen: 'full',
+            }}
+          />
         </div>
       </header>
 
@@ -198,7 +180,7 @@ function App() {
         {/* Left column: Editor & controls */}
         <section className="glass-panel">
           <div className="panel-title">
-            <FileCode size={20} color="var(--accent-cyan)" />
+            <FileCode size={20} color="var(--accent-blue)" />
             <h2>Contract Auditor Panel</h2>
           </div>
 
@@ -211,7 +193,7 @@ function App() {
                 onClick={() => setConnectionType('wallet')}
               >
                 <Wallet size={14} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-                Browser Wallet
+                RainbowKit Wallet
               </button>
               <button 
                 className={`tab-btn ${connectionType === 'key' ? 'active' : ''}`}
@@ -226,21 +208,20 @@ function App() {
           {/* Dynamic connection interface */}
           {connectionType === 'wallet' ? (
             <div className="form-group">
-              <label className="form-label">EVM Wallet</label>
-              {walletAddress ? (
+              <label className="form-label">Active Connection</label>
+              {isConnected ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '14px' }}>
                   <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-green)' }}>
-                    {walletAddress.slice(0, 8)}...{walletAddress.slice(-8)}
+                    {connectedWalletAddress.slice(0, 8)}...{connectedWalletAddress.slice(-8)}
                   </span>
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle size={12} color="var(--accent-green)" /> Connected
+                    <CheckCircle size={12} color="var(--accent-green)" /> Connected via RainbowKit
                   </span>
                 </div>
               ) : (
-                <button className="btn-connect-wallet" onClick={connectWallet}>
-                  <Wallet size={16} />
-                  Connect Wallet (MetaMask/Rabby)
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '13px', gap: '8px' }}>
+                  <span>Please connect your wallet in the top right to sign transactions.</span>
+                </div>
               )}
             </div>
           ) : (
@@ -259,28 +240,16 @@ function App() {
             </div>
           )}
 
-          {/* Contract inputs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            <div className="form-group">
-              <label className="form-label">GenShield Contract Address</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                style={{ paddingLeft: '16px' }}
-                value={contractAddress}
-                onChange={(e) => setContractAddress(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Audit Contract Name</label>
-              <input 
-                type="text" 
-                className="form-input" 
-                style={{ paddingLeft: '16px' }}
-                value={contractName}
-                onChange={(e) => setContractName(e.target.value)}
-              />
-            </div>
+          {/* Contract Name */}
+          <div className="form-group">
+            <label className="form-label">Audit Contract Name</label>
+            <input 
+              type="text" 
+              className="form-input" 
+              style={{ paddingLeft: '16px' }}
+              value={contractName}
+              onChange={(e) => setContractName(e.target.value)}
+            />
           </div>
 
           {/* Custom Monaco-like editor */}
@@ -311,7 +280,7 @@ function App() {
           <button 
             className="btn-primary" 
             onClick={handleAudit} 
-            disabled={isAuditing || (connectionType === 'key' && !privateKey)}
+            disabled={isAuditing || (connectionType === 'wallet' && !isConnected) || (connectionType === 'key' && !privateKey)}
           >
             {isAuditing ? (
               <>
@@ -334,7 +303,7 @@ function App() {
           {/* Terminal Logs */}
           <div className="glass-panel" style={{ flex: 1 }}>
             <div className="panel-title">
-              <Terminal size={20} color="var(--accent-purple)" />
+              <Terminal size={20} color="var(--accent-blue)" />
               <h2>Consensus Console Log</h2>
             </div>
             
@@ -351,7 +320,7 @@ function App() {
                 )}
                 {logs.map((log, index) => (
                   <div key={index} className={`terminal-line ${log.type}`}>
-                    <span style={{ color: 'rgba(255,255,255,0.2)', marginRight: '8px' }}>[{log.time}]</span>
+                    <span style={{ color: 'rgba(255,255,255,0.15)', marginRight: '8px' }}>[{log.time}]</span>
                     {log.text}
                   </div>
                 ))}
@@ -410,10 +379,10 @@ function App() {
                 </div>
 
                 <a 
-                  href={`https://studio.genlayer.com/contract/${contractAddress}`} 
+                  href={`https://studio.genlayer.com/contract/${CONTRACT_ADDRESS}`} 
                   target="_blank" 
                   rel="noreferrer"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', color: 'var(--accent-cyan)', textDecoration: 'none', marginTop: '4px' }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '12px', color: 'var(--accent-blue)', textDecoration: 'none', marginTop: '4px' }}
                 >
                   View Contract on GenLayer Explorer <ArrowUpRight size={12} />
                 </a>
