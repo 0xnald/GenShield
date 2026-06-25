@@ -34,6 +34,8 @@ function App() {
   const { address: connectedWalletAddress, isConnected, connector } = useAccount();
   const [connectionType, setConnectionType] = useState('wallet');
   const [privateKey, setPrivateKey] = useState('');
+  const [isFunding, setIsFunding] = useState(false);
+  const [keyAddress, setKeyAddress] = useState('');
   const [contractName, setContractName] = useState('MySmartContract');
   const [code, setCode] = useState(SAMPLE_CODE);
   const [logs, setLogs] = useState([]);
@@ -41,6 +43,55 @@ function App() {
   const [certificate, setCertificate] = useState(null);
   const [lineCount, setLineCount] = useState(1);
   const terminalEndRef = useRef(null);
+
+  // Derive address from private key
+  useEffect(() => {
+    if (privateKey) {
+      try {
+        let cleanKey = privateKey.trim();
+        if (!cleanKey.startsWith('0x') && cleanKey.length === 64) {
+          cleanKey = '0x' + cleanKey;
+        }
+        const account = createAccount(cleanKey);
+        setKeyAddress(account.address);
+      } catch (e) {
+        setKeyAddress('');
+      }
+    } else {
+      setKeyAddress('');
+    }
+  }, [privateKey]);
+
+  // Request funds from Studionet simulator faucet
+  const handleFaucet = async (targetAddress) => {
+    if (!targetAddress) return;
+    setIsFunding(true);
+    addLog(`Requesting 10 Test GEN (Faucet) for ${targetAddress}...`, "info");
+    
+    try {
+      const response = await fetch("https://studio.genlayer.com/api", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: `{"jsonrpc":"2.0","method":"sim_fundAccount","params":["${targetAddress}",10000000000000000000],"id":1}`,
+      });
+      
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error.message || "Unknown RPC error");
+      }
+      
+      const txHash = data.result;
+      addLog(`Faucet request successful! Transaction: ${txHash}`, "success");
+      addLog(`Account successfully funded with 10 Test GEN.`, "success");
+    } catch (err) {
+      addLog(`Faucet request failed: ${err.message}`, "error");
+      console.error(err);
+    } finally {
+      setIsFunding(false);
+    }
+  };
 
   // Auto scroll terminal logs
   useEffect(() => {
@@ -210,13 +261,23 @@ function App() {
             <div className="form-group">
               <label className="form-label">Active Connection</label>
               {isConnected ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '14px' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-green)' }}>
-                    {connectedWalletAddress.slice(0, 8)}...{connectedWalletAddress.slice(-8)}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <CheckCircle size={12} color="var(--accent-green)" /> Connected via RainbowKit
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '14px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-green)' }}>
+                      {connectedWalletAddress.slice(0, 8)}...{connectedWalletAddress.slice(-8)}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle size={12} color="var(--accent-green)" /> Connected via RainbowKit
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-faucet"
+                    onClick={() => handleFaucet(connectedWalletAddress)}
+                    disabled={isFunding}
+                  >
+                    {isFunding ? "Funding Wallet..." : "Request 10 Test GEN (Faucet)"}
+                  </button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '16px', border: '1px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '13px', gap: '8px' }}>
@@ -237,6 +298,23 @@ function App() {
                   onChange={(e) => setPrivateKey(e.target.value)}
                 />
               </div>
+              {keyAddress && (
+                <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '13px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                      Address: <span style={{ color: 'var(--text-primary)' }}>{keyAddress.slice(0, 8)}...{keyAddress.slice(-8)}</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-faucet"
+                    onClick={() => handleFaucet(keyAddress)}
+                    disabled={isFunding}
+                  >
+                    {isFunding ? "Funding Account..." : "Request 10 Test GEN (Faucet)"}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

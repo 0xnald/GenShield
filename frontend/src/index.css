@@ -523,3 +523,42 @@ button:active,
     stroke-dashoffset: -124;
   }
 }
+
+/* Faucet Button Styling */
+.btn-faucet {
+  background: rgba(0, 102, 255, 0.12);
+  color: #80b3ff;
+  border: 1px solid rgba(0, 102, 255, 0.35);
+  padding: 12px 20px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--font-sans);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: background 0.25s, border-color 0.25s, color 0.25s, transform 0.1s;
+}
+
+.btn-faucet:hover:not(:disabled) {
+  background: rgba(0, 102, 255, 0.22);
+  border-color: rgba(0, 102, 255, 0.6);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 102, 255, 0.2);
+}
+
+.btn-faucet:active:not(:disabled) {
+  transform: scale(0.96) !important;
+}
+
+.btn-faucet:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
