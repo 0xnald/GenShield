@@ -29,8 +29,8 @@ def main():
     print(f"Loaded GenShield contract address: {contract_address}")
 
     print("Initializing GenLayer client for Studionet...")
-    client = genlayer_py.create_client(chain=genlayer_py.studionet)
     account = genlayer_py.create_account(private_key)
+    client = genlayer_py.create_client(chain=genlayer_py.studionet, account=account)
     
     # 1. Verify View Methods
     print("\n--- Verifying View Methods ---")
@@ -85,7 +85,8 @@ def main():
         certificate = client.read_contract(
             contract_address,
             "get_certificate",
-            args=[code_hash]
+            args=[code_hash],
+            account=account
         )
         
         if not certificate:
