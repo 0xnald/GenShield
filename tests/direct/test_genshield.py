@@ -83,3 +83,23 @@ def test_genshield_insufficient_payment(direct_vm, direct_deploy, direct_alice):
 
     with direct_vm.expect_revert("Insufficient payment for audit fee"):
         genshield.submit_audit("DummyContract", "code")
+
+def test_genshield_owner_and_fee_update(direct_vm, direct_deploy, direct_alice):
+    # Deploy contract
+    direct_vm.sender = direct_alice
+    genshield = direct_deploy("contracts/genshield.py", 1000)
+    from genlayer import Address
+
+    # Verify owner view returns alice's address hex
+    assert genshield.get_owner() == Address(direct_alice).as_hex
+
+    # Bob (non-owner) tries to update the fee, which should revert
+    bob = b"\x02" * 20
+    direct_vm.sender = bob
+    with direct_vm.expect_revert("Only the owner can update the minimum fee"):
+        genshield.update_min_fee(2000)
+
+    # Alice (owner) updates the fee to 2000
+    direct_vm.sender = direct_alice
+    genshield.update_min_fee(2000)
+    assert genshield.get_min_fee() == 2000
