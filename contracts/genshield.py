@@ -19,10 +19,12 @@ class AuditCertificate:
 class GenShield(gl.Contract):
     certificates: TreeMap[str, AuditCertificate]
     min_fee: u256
+    owner: Address
 
     def __init__(self, min_fee: u256):
         self.min_fee = min_fee
         self.certificates = TreeMap()
+        self.owner = gl.message.sender_address
 
     @gl.public.write.payable
     def submit_audit(self, contract_name: str, code: str) -> str:
@@ -129,3 +131,13 @@ class GenShield(gl.Contract):
     @gl.public.view
     def get_min_fee(self) -> u256:
         return self.min_fee
+
+    @gl.public.write
+    def update_min_fee(self, new_fee: u256) -> None:
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError("Only the owner can update the minimum fee")
+        self.min_fee = new_fee
+
+    @gl.public.view
+    def get_owner(self) -> str:
+        return str(self.owner)
