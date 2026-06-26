@@ -243,6 +243,9 @@ function App() {
     
     addLog("Initializing audit workflow...", "info");
 
+    // Normalize line endings to LF to prevent Windows CRLF / Linux LF hash mismatches on-chain
+    const normalizedCode = code.replace(/\r\n/g, '\n');
+
     let codeHash = '';
     try {
       let client;
@@ -284,7 +287,7 @@ function App() {
       
       // Calculate SHA-256 locally to log it
       const encoder = new TextEncoder();
-      const codeBytes = encoder.encode(code);
+      const codeBytes = encoder.encode(normalizedCode);
       const hashBuffer = await crypto.subtle.digest('SHA-256', codeBytes);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
       codeHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -313,7 +316,7 @@ function App() {
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "submit_audit",
-        args: [contractName, code],
+        args: [contractName, normalizedCode],
         value: fee
       });
       
@@ -349,7 +352,7 @@ function App() {
 
       // Run local fallback static analysis on error/timeout
       addLog("Running local fallback static analyzer on contract code...", "warning");
-      const localVulns = analyzeContractLocally(code);
+      const localVulns = analyzeContractLocally(normalizedCode);
       
       const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
       
