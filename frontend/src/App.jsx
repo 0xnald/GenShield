@@ -169,6 +169,55 @@ function analyzeContractLocally(code) {
     }
   });
 
+  // 6. Typo or invalid types check in annotations (e.g. value: u2, value: uint256)
+  lines.forEach((line, index) => {
+    const annotationMatches = line.matchAll(/(?:\b[a-zA-Z_]\w*\s*:\s*|->\s*)([a-zA-Z0-9_]+)/g);
+    for (const match of annotationMatches) {
+      const typeName = match[1];
+      
+      if (typeName === 'uint256' || typeName === 'uint') {
+        vulnerabilities.push({
+          type: "type_error",
+          description: `Invalid type '${typeName}' on line ${index + 1}. GenLayer uses 'u256' instead of '${typeName}'.`,
+          severity: "high",
+          line: index + 1,
+          suggested_fix: `Change '${typeName}' to 'u256'.`
+        });
+      } else if (typeName === 'string') {
+        vulnerabilities.push({
+          type: "type_error",
+          description: `Invalid type 'string' on line ${index + 1}. Python/GenLayer uses 'str' for strings.`,
+          severity: "high",
+          line: index + 1,
+          suggested_fix: "Change 'string' to 'str'."
+        });
+      } else if (typeName === 'address') {
+        vulnerabilities.push({
+          type: "type_error",
+          description: `Invalid type 'address' on line ${index + 1}. GenLayer uses capitalized 'Address'.`,
+          severity: "high",
+          line: index + 1,
+          suggested_fix: "Change 'address' to 'Address'."
+        });
+      }
+      
+      const isSizedInt = /^[ui]\d+$/.test(typeName);
+      if (isSizedInt) {
+        const validSizedInts = ['u8', 'u16', 'u32', 'u64', 'u128', 'u256', 'i8', 'i16', 'i32', 'i64', 'i128', 'i256'];
+        if (!validSizedInts.includes(typeName)) {
+          const suggested = typeName.startsWith('u') ? 'u256' : 'i256';
+          vulnerabilities.push({
+            type: "type_error",
+            description: `Invalid sized integer type '${typeName}' on line ${index + 1}. GenLayer only supports: ${validSizedInts.join(', ')}.`,
+            severity: "high",
+            line: index + 1,
+            suggested_fix: `Change '${typeName}' to a valid sized integer type, such as '${suggested}'.`
+          });
+        }
+      }
+    }
+  });
+
   return vulnerabilities;
 }
 
@@ -343,7 +392,28 @@ function App() {
           addLog("Certificate retrieved! Contract code was rejected/marked UNSAFE by validators.", "error");
         }
       } else {
-        addLog("Audit transaction completed, but no certificate registry was found.", "error");
+        addLog("Audit transaction completed, but no certificate registry was found on-chain.", "error");
+        
+        // Run local fallback static analyzer since lookup failed
+        addLog("Running local fallback static analyzer to diagnose contract code...", "warning");
+        const localVulns = analyzeContractLocally(normalizedCode);
+        const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
+
+        if (localVulns.length > 0) {
+          addLog(`Local static analysis detected ${localVulns.length} potential issues in your code!`, "error");
+          const localCert = {
+            contract_name: contractName,
+            code_hash: codeHash || 'local_analysis_fallback',
+            auditor: targetAddress || '0x0000000000000000000000000000000000000000',
+            score: Math.max(0, 100 - localVulns.length * 20),
+            is_safe: false,
+            timestamp: new Date().toISOString(),
+            vulnerabilities_json: JSON.stringify(localVulns)
+          };
+          setCertificate(localCert);
+        } else {
+          addLog("Local static analysis found no obvious syntax or layout errors.", "success");
+        }
       }
 
     } catch (err) {
