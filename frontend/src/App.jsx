@@ -147,6 +147,23 @@ function App() {
       const codeHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       addLog(`Calculated local code hash: ${codeHash}`, "sys");
 
+      // Auto-fund the signing address in the background on Studionet
+      const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
+      if (targetAddress) {
+        try {
+          addLog("Securing test GEN in the background (Studionet Faucet)...", "sys");
+          await fetch("https://studio.genlayer.com/api", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: `{"jsonrpc":"2.0","method":"sim_fundAccount","params":["${targetAddress}",10000000000000000000],"id":1}`,
+          });
+        } catch (faucetErr) {
+          console.warn("Studionet faucet auto-funding skipped or failed:", faucetErr);
+        }
+      }
+
       const fee = 1000n; // 1000 Wei audit fee
       addLog(`Submitting transaction with paid fee value: ${fee.toString()} Wei`, "info");
       
