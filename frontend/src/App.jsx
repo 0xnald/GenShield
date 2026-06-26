@@ -30,6 +30,148 @@ class MyContract(gl.Contract):
 // Hidden contract address loaded from env or default Studionet address
 const CONTRACT_ADDRESS = import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x69E895F178CdF05b3C70e97289f31e3E79A9E4Ef';
 
+// Client-side static analyzer fallback for common GenLayer contract errors
+function analyzeContractLocally(code) {
+  const vulnerabilities = [];
+  const lines = code.split('\n');
+
+  // 1. Bracket mismatch check
+  const brackets = {
+    '(': { count: 0, open: '(', close: ')', name: 'parentheses' },
+    '[': { count: 0, open: '[', close: ']', name: 'square brackets' },
+    '{': { count: 0, open: '{', close: '}', name: 'curly braces' }
+  };
+  
+  for (let i = 0; i < code.length; i++) {
+    const char = code[i];
+    if (char === '(') brackets['('].count++;
+    else if (char === ')') brackets['('].count--;
+    else if (char === '[') brackets['['].count++;
+    else if (char === ']') brackets['['].count--;
+    else if (char === '{') brackets['{'].count++;
+    else if (char === '}') brackets['{'].count--;
+  }
+
+  for (const key in brackets) {
+    if (brackets[key].count !== 0) {
+      vulnerabilities.push({
+        type: "syntax_error",
+        description: `Unbalanced ${brackets[key].name} detected. You have ${brackets[key].count > 0 ? 'unclosed' : 'extra'} '${brackets[key].open}' or '${brackets[key].close}'.`,
+        severity: "high",
+        line: 1,
+        suggested_fix: `Ensure every opened '${brackets[key].open}' has a matching closing '${brackets[key].close}'. Check for trailing symbols.`
+      });
+    }
+  }
+
+  // 2. Dependency header check
+  let hasDepends = false;
+  for (let i = 0; i < Math.min(5, lines.length); i++) {
+    if (lines[i].includes('"Depends"') && lines[i].includes('py-genlayer')) {
+      hasDepends = true;
+      break;
+    }
+  }
+  if (!hasDepends && lines.length > 0) {
+    vulnerabilities.push({
+      type: "compatibility_warning",
+      description: "Missing py-genlayer dependency header at the top of the file. GenLayer node needs this to load correct environment.",
+      severity: "medium",
+      line: 1,
+      suggested_fix: `# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }`
+    });
+  }
+
+  // 3. Forbidden imports check
+  const forbiddenModules = ['os', 'sys', 'subprocess', 'socket', 'requests', 'urllib', 'shutil', 'pathlib'];
+  lines.forEach((line, index) => {
+    forbiddenModules.forEach(mod => {
+      const importRegex = new RegExp(`\\b(import\\s+${mod}\\b|from\\s+${mod}\\s+import\\b)`, 'g');
+      if (importRegex.test(line)) {
+        vulnerabilities.push({
+          type: "forbidden_import",
+          description: `Import of forbidden module '${mod}' detected on line ${index + 1}.`,
+          severity: "high",
+          line: index + 1,
+          suggested_fix: `Remove the import. GenVM executes in a deterministic sandbox and does not allow raw OS or network access via standard library modules. Use GenLayer API alternatives if fetching data.`
+        });
+      }
+    });
+  });
+
+  // 4. Class definition & storage layout rules
+  let insideClass = false;
+  lines.forEach((line, index) => {
+    // Detect class start
+    const classMatch = line.match(/^\s*class\s+(\w+)\s*\(([^)]+)\)\s*:/);
+    if (classMatch) {
+      insideClass = true;
+      const baseClass = classMatch[2];
+      if (!baseClass.includes('gl.Contract') && !baseClass.includes('Contract')) {
+        vulnerabilities.push({
+          type: "class_definition_error",
+          description: `Class '${classMatch[1]}' on line ${index + 1} does not inherit from 'gl.Contract'.`,
+          severity: "high",
+          line: index + 1,
+          suggested_fix: `Change class declaration to inherit from gl.Contract:\nclass ${classMatch[1]}(gl.Contract):`
+        });
+      }
+      return;
+    }
+
+    // Inside class layout checking
+    if (insideClass) {
+      const methodMatch = line.match(/^\s*def\s+\w+/);
+      const stateVarMatch = line.match(/^\s+([a-zA-Z_]\w*)\s*:\s*([^=\n#]+)/);
+      if (stateVarMatch && !methodMatch) {
+        const varName = stateVarMatch[1];
+        const varType = stateVarMatch[2].trim();
+
+        if (varType === 'int') {
+          vulnerabilities.push({
+            type: "storage_layout_error",
+            description: `State variable '${varName}' on line ${index + 1} uses generic Python 'int' type.`,
+            severity: "medium",
+            line: index + 1,
+            suggested_fix: `Change type annotation to a sized integer type (e.g., u256, u32, i32) for determinism:\n${varName}: u256`
+          });
+        } else if (varType === 'dict' || varType.startsWith('dict[')) {
+          vulnerabilities.push({
+            type: "storage_layout_error",
+            description: `State variable '${varName}' on line ${index + 1} uses native python 'dict' which is not persistent.`,
+            severity: "high",
+            line: index + 1,
+            suggested_fix: `Use GenLayer 'TreeMap' for persistent key-value mappings:\n${varName}: TreeMap[Address, u256]`
+          });
+        } else if (varType === 'list' || varType.startsWith('list[')) {
+          vulnerabilities.push({
+            type: "storage_layout_error",
+            description: `State variable '${varName}' on line ${index + 1} uses native python 'list' which is not persistent.`,
+            severity: "high",
+            line: index + 1,
+            suggested_fix: `Use GenLayer 'DynArray' for persistent dynamically-sized arrays:\n${varName}: DynArray[u256]`
+          });
+        }
+      }
+    }
+  });
+
+  // 5. Look for direct use of eval / exec
+  lines.forEach((line, index) => {
+    if (/\b(eval|exec)\s*\(/.test(line)) {
+      vulnerabilities.push({
+        type: "security_violation",
+        description: `Use of forbidden function 'eval' or 'exec' on line ${index + 1}.`,
+        severity: "high",
+        line: index + 1,
+        suggested_fix: "Remove dynamic code execution. All contract operations in GenLayer must be static and deterministic."
+      });
+    }
+  });
+
+  return vulnerabilities;
+}
+
 function App() {
   const { address: connectedWalletAddress, isConnected, connector } = useAccount();
   const [connectionType, setConnectionType] = useState('wallet');
@@ -101,6 +243,7 @@ function App() {
     
     addLog("Initializing audit workflow...", "info");
 
+    let codeHash = '';
     try {
       let client;
       
@@ -144,7 +287,7 @@ function App() {
       const codeBytes = encoder.encode(code);
       const hashBuffer = await crypto.subtle.digest('SHA-256', codeBytes);
       const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const codeHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      codeHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       addLog(`Calculated local code hash: ${codeHash}`, "sys");
 
       // Auto-fund the signing address in the background on Studionet
@@ -203,6 +346,49 @@ function App() {
     } catch (err) {
       addLog(`Execution error: ${err.message}`, "error");
       console.error(err);
+
+      // Run local fallback static analysis on error/timeout
+      addLog("Running local fallback static analyzer on contract code...", "warning");
+      const localVulns = analyzeContractLocally(code);
+      
+      const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
+      
+      if (localVulns.length > 0) {
+        addLog(`Local static analysis detected ${localVulns.length} potential issues in your code!`, "error");
+        
+        const localCert = {
+          contract_name: contractName,
+          code_hash: codeHash || 'local_analysis_fallback',
+          auditor: targetAddress || '0x0000000000000000000000000000000000000000',
+          score: Math.max(0, 100 - localVulns.length * 20),
+          is_safe: false,
+          timestamp: new Date().toISOString(),
+          vulnerabilities_json: JSON.stringify(localVulns)
+        };
+        setCertificate(localCert);
+      } else {
+        addLog("Local static analysis found no obvious syntax or layout errors.", "success");
+        addLog("Populating consensus timeout error report.", "info");
+        
+        const timeoutVulns = [{
+          type: "consensus_timeout",
+          description: `On-chain execution timed out or failed: ${err.message}. The GenLayer validator node/Ollama LLM service might be offline or slow.`,
+          severity: "high",
+          line: 1,
+          suggested_fix: "Verify that your local or studio GenLayer validator nodes are running correctly. If you altered the source code, double check for hidden exceptions that might cause LLM consensus mismatch."
+        }];
+        
+        const localCert = {
+          contract_name: contractName,
+          code_hash: codeHash || 'local_analysis_fallback',
+          auditor: targetAddress || '0x0000000000000000000000000000000000000000',
+          score: 0,
+          is_safe: false,
+          timestamp: new Date().toISOString(),
+          vulnerabilities_json: JSON.stringify(timeoutVulns)
+        };
+        setCertificate(localCert);
+      }
     } finally {
       setIsAuditing(false);
     }
