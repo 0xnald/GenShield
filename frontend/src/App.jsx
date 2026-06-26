@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient, createAccount } from 'genlayer-js';
-import { studionet } from 'genlayer-js/chains';
+import { studionet, testnetBradbury } from 'genlayer-js/chains';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useAccount } from 'wagmi';
 import { 
@@ -28,7 +28,10 @@ class MyContract(gl.Contract):
 `;
 
 // Hidden contract address loaded from env or default Studionet address
-const CONTRACT_ADDRESS = import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x69E895F178CdF05b3C70e97289f31e3E79A9E4Ef';
+const CONTRACT_ADDRESSES = {
+  studionet: import.meta.env.VITE_GENSHIELD_CONTRACT_ADDRESS || '0x69E895F178CdF05b3C70e97289f31e3E79A9E4Ef',
+  bradbury: import.meta.env.VITE_GENSHIELD_BRADBURY_ADDRESS || '0x774110477436aBe7fA9324e8AF37F2b434cc1207'
+};
 
 // Client-side static analyzer fallback for common GenLayer contract errors
 function analyzeContractLocally(code) {
@@ -223,6 +226,7 @@ function analyzeContractLocally(code) {
 
 function App() {
   const { address: connectedWalletAddress, isConnected, connector } = useAccount();
+  const [network, setNetwork] = useState('studionet');
   const [connectionType, setConnectionType] = useState('wallet');
   const [privateKey, setPrivateKey] = useState('');
   const [keyAddress, setKeyAddress] = useState('');
@@ -255,7 +259,10 @@ function App() {
 
   // Construct block explorer links dynamically based on the active explorer base URL
   const getExplorerUrl = (type, value) => {
-    const base = import.meta.env.VITE_EXPLORER_BASE_URL || 'https://studio.genlayer.com';
+    const base = network === 'bradbury'
+      ? 'https://explorer-bradbury.genlayer.com'
+      : (import.meta.env.VITE_EXPLORER_BASE_URL || 'https://studio.genlayer.com');
+    
     const isBradbury = base.includes('explorer-bradbury.genlayer.com');
     
     if (type === 'tx') {
@@ -294,6 +301,8 @@ function App() {
 
     // Normalize line endings to LF to prevent Windows CRLF / Linux LF hash mismatches on-chain
     const normalizedCode = code.replace(/\r\n/g, '\n');
+    const activeChain = network === 'bradbury' ? testnetBradbury : studionet;
+    const activeContractAddress = CONTRACT_ADDRESSES[network];
 
     let codeHash = '';
     try {
@@ -308,7 +317,7 @@ function App() {
         const provider = await connector.getProvider();
         
         client = createClient({
-          chain: studionet,
+          chain: activeChain,
           account: connectedWalletAddress,
           provider: provider
         });
@@ -327,7 +336,7 @@ function App() {
         addLog(`Signer generated for: ${account.address}`, "success");
         
         client = createClient({
-          chain: studionet,
+          chain: activeChain,
           account: account
         });
       }
@@ -344,7 +353,7 @@ function App() {
 
       // Auto-fund the signing address in the background on Studionet
       const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
-      if (targetAddress) {
+      if (network === 'studionet' && targetAddress) {
         try {
           addLog("Securing test GEN in the background (Studionet Faucet)...", "sys");
           await fetch("https://studio.genlayer.com/api", {
@@ -363,7 +372,7 @@ function App() {
       addLog(`Submitting transaction with paid fee value: ${fee.toString()} Wei`, "info");
       
       const txHash = await client.writeContract({
-        address: CONTRACT_ADDRESS,
+        address: activeContractAddress,
         functionName: "submit_audit",
         args: [contractName, normalizedCode],
         value: fee
@@ -379,7 +388,7 @@ function App() {
 
       addLog("Fetching Verifiable Security Certificate from contract storage...", "info");
       const cert = await client.readContract({
-        address: CONTRACT_ADDRESS,
+        address: activeContractAddress,
         functionName: "get_certificate",
         args: [codeHash]
       });
@@ -394,7 +403,7 @@ function App() {
       } else {
         addLog("Audit transaction completed, but no certificate registry was found on-chain.", "error");
         
-        // Run local fallback static analyzer since lookup failed
+        // Run local fallback static analysis since lookup failed
         addLog("Running local fallback static analyzer to diagnose contract code...", "warning");
         const localVulns = analyzeContractLocally(normalizedCode);
         const targetAddress = connectionType === 'wallet' ? connectedWalletAddress : keyAddress;
@@ -508,6 +517,33 @@ function App() {
           <div className="panel-title">
             <FileCode size={20} color="var(--accent-blue)" />
             <h2>Contract Auditor Panel</h2>
+          </div>
+
+          {/* Target Network Selection */}
+          <div className="form-group">
+            <label className="form-label">Target Network</label>
+            <select 
+              className="form-input" 
+              style={{ 
+                paddingLeft: '16px', 
+                background: 'rgba(0,0,0,0.3)', 
+                border: '1px solid var(--border-color)', 
+                color: 'var(--text-primary)', 
+                cursor: 'pointer',
+                borderRadius: '12px',
+                height: '42px',
+                fontSize: '13px',
+                fontWeight: '500'
+              }}
+              value={network}
+              onChange={(e) => {
+                setNetwork(e.target.value);
+                addLog(`Switched target network to: ${e.target.value === 'bradbury' ? 'GenLayer Bradbury Testnet' : 'GenLayer Studionet'}`, 'info');
+              }}
+            >
+              <option value="studionet" style={{ background: '#0a0d14', color: 'var(--text-primary)' }}>GenLayer Studionet</option>
+              <option value="bradbury" style={{ background: '#0a0d14', color: 'var(--text-primary)' }}>GenLayer Bradbury Testnet</option>
+            </select>
           </div>
 
           {/* Connection selection tabs */}
@@ -795,7 +831,7 @@ function App() {
                     </a>
                   )}
                   <a 
-                    href={getExplorerUrl('contract', CONTRACT_ADDRESS)} 
+                    href={getExplorerUrl('contract', CONTRACT_ADDRESSES[network])} 
                     target="_blank" 
                     rel="noreferrer"
                     className="explorer-link"
