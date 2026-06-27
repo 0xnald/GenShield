@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createClient, createAccount } from 'genlayer-js';
 import { studionet, testnetBradbury } from 'genlayer-js/chains';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
+import { useAccount, useSwitchChain } from 'wagmi';
 import { 
   Play, Key, Wallet, Terminal, 
   FileCode, Award, Shield, CheckCircle, 
@@ -225,7 +225,8 @@ function analyzeContractLocally(code) {
 }
 
 function App() {
-  const { address: connectedWalletAddress, isConnected, connector } = useAccount();
+  const { address: connectedWalletAddress, isConnected, connector, chain } = useAccount();
+  const { switchChain } = useSwitchChain();
   const [network, setNetwork] = useState('studionet');
   const [connectionType, setConnectionType] = useState('wallet');
   const [privateKey, setPrivateKey] = useState('');
@@ -238,6 +239,29 @@ function App() {
   const [certificate, setCertificate] = useState(null);
   const [lineCount, setLineCount] = useState(1);
   const terminalEndRef = useRef(null);
+
+  // Sync network state when wallet chain changes
+  useEffect(() => {
+    if (isConnected && chain) {
+      if (chain.id === 4221 && network !== 'bradbury') {
+        setNetwork('bradbury');
+        addLog(`Wallet is on GenLayer Bradbury Testnet. Switched active network to Bradbury.`, 'info');
+      } else if (chain.id === 61999 && network !== 'studionet') {
+        setNetwork('studionet');
+        addLog(`Wallet is on GenLayer Studionet. Switched active network to Studionet.`, 'info');
+      }
+    }
+  }, [chain, isConnected]);
+
+  // Switch wallet chain when dropdown network changes
+  useEffect(() => {
+    if (isConnected && switchChain && chain) {
+      const targetChainId = network === 'bradbury' ? 4221 : 61999;
+      if (chain.id !== targetChainId) {
+        switchChain({ chainId: targetChainId });
+      }
+    }
+  }, [network, isConnected, switchChain, chain]);
 
   // Derive address from private key
   useEffect(() => {
@@ -311,6 +335,11 @@ function App() {
       if (connectionType === 'wallet') {
         if (!isConnected || !connector) {
           throw new Error("No wallet connected. Please connect your wallet using the button in the header.");
+        }
+        
+        // Friendly check for mismatched chains before invoking the transaction
+        if (chain && chain.id !== activeChain.id) {
+          throw new Error(`Wallet is connected to chain ID ${chain.id} (${chain.name}) but target network selection is set to ${activeChain.name} (Chain ID ${activeChain.id}). Please switch your wallet network to match.`);
         }
         
         addLog(`Fetching wallet provider for signer: ${connectedWalletAddress}...`, "info");

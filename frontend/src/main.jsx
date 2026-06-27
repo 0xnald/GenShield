@@ -22,12 +22,25 @@ const studionetChain = {
   },
 };
 
+// Define GenLayer Bradbury Testnet chain
+const bradburyChain = {
+  id: 4221,
+  name: 'Genlayer Bradbury Testnet',
+  nativeCurrency: { name: 'GEN Token', symbol: 'GEN', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc-bradbury.genlayer.com'] },
+  },
+  blockExplorers: {
+    default: { name: 'GenLayer Bradbury Explorer', url: 'https://explorer-bradbury.genlayer.com' },
+  },
+};
+
 const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'your_walletconnect_project_id_here';
 
 const config = getDefaultConfig({
   appName: 'GenShield On-Chain Auditor',
   projectId: projectId,
-  chains: [studionetChain],
+  chains: [studionetChain, bradburyChain],
   ssr: false,
 });
 
