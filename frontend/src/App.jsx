@@ -240,28 +240,25 @@ function App() {
   const [lineCount, setLineCount] = useState(1);
   const terminalEndRef = useRef(null);
 
-  // Sync network state when wallet chain changes
+  const prevChainIdRef = useRef(chain?.id);
+
+  // Sync network state only when the wallet's chain actually changes
   useEffect(() => {
     if (isConnected && chain) {
-      if (chain.id === 4221 && network !== 'bradbury') {
-        setNetwork('bradbury');
-        addLog(`Wallet is on GenLayer Bradbury Testnet. Switched active network to Bradbury.`, 'info');
-      } else if (chain.id === 61999 && network !== 'studionet') {
-        setNetwork('studionet');
-        addLog(`Wallet is on GenLayer Studionet. Switched active network to Studionet.`, 'info');
+      if (chain.id !== prevChainIdRef.current) {
+        if (chain.id === 4221 && network !== 'bradbury') {
+          setNetwork('bradbury');
+          addLog(`Wallet chain changed to GenLayer Bradbury Testnet.`, 'info');
+        } else if (chain.id === 61999 && network !== 'studionet') {
+          setNetwork('studionet');
+          addLog(`Wallet chain changed to GenLayer Studionet.`, 'info');
+        }
+        prevChainIdRef.current = chain.id;
       }
+    } else if (!isConnected) {
+      prevChainIdRef.current = undefined;
     }
   }, [chain, isConnected]);
-
-  // Switch wallet chain when dropdown network changes
-  useEffect(() => {
-    if (isConnected && switchChain && chain) {
-      const targetChainId = network === 'bradbury' ? 4221 : 61999;
-      if (chain.id !== targetChainId) {
-        switchChain({ chainId: targetChainId });
-      }
-    }
-  }, [network, isConnected, switchChain, chain]);
 
   // Derive address from private key
   useEffect(() => {
@@ -569,8 +566,15 @@ function App() {
               }}
               value={network}
               onChange={(e) => {
-                setNetwork(e.target.value);
-                addLog(`Switched target network to: ${e.target.value === 'bradbury' ? 'GenLayer Bradbury Testnet' : 'GenLayer Studionet'}`, 'info');
+                const selectedVal = e.target.value;
+                setNetwork(selectedVal);
+                addLog(`Switched target network selection to: ${selectedVal === 'bradbury' ? 'GenLayer Bradbury Testnet' : 'GenLayer Studionet'}`, 'info');
+                
+                // Prompt wallet to switch chain if connected
+                if (isConnected && switchChain) {
+                  const targetChainId = selectedVal === 'bradbury' ? 4221 : 61999;
+                  switchChain({ chainId: targetChainId });
+                }
               }}
             >
               <option value="studionet" style={{ background: '#0a0d14', color: 'var(--text-primary)' }}>GenLayer Studionet</option>
