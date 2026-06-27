@@ -10,7 +10,7 @@ GenShield is an **Intelligent Contract** built on the **GenLayer** blockchain th
 * **Vulnerability & Fix Registry**: Stores structured vulnerability reports—including line numbers, severity levels, issue descriptions, and exact code corrections—directly in the contract storage.
 * **Dual Network support**: Fully deployed and verified on both **GenLayer Studionet** and **GenLayer Bradbury Testnet**.
 * **Seamless Wallet Synchronization**: Features a premium glassmorphic React frontend that automatically prompts your browser wallet (MetaMask, Rabby, etc.) to switch networks when you toggle target networks, and vice-versa.
-* **Client-Side Fallback Static Analyzer**: Runs pre-screening checks locally for syntax, bracket balance, missing dependencies, or improper persistent storage types, providing instant feedback even during network timeouts.
+
 
 ---
 
