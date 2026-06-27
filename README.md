@@ -113,20 +113,6 @@ sequenceDiagram
    npm run dev
    ```
 
----
-
-## 🌐 Deploying to Vercel
-
-The frontend is fully optimized for **Vercel** hosting:
-1. Import the repository in Vercel.
-2. Set the **Root Directory** to `frontend`.
-3. Add the following **Environment Variables**:
-   * `VITE_WALLETCONNECT_PROJECT_ID` (Your WalletConnect Project ID for RainbowKit)
-   * `VITE_GENSHIELD_CONTRACT_ADDRESS` = `0x69E895F178CdF05b3C70e97289f31e3E79A9E4Ef`
-   * `VITE_GENSHIELD_BRADBURY_ADDRESS` = `0x774110477436aBe7fA9324e8AF37F2b434cc1207`
-4. Click **Deploy**. SPA redirects will be handled automatically by the included `vercel.json` routing configuration.
-
----
 
 ## 📄 License
 This project is licensed under the MIT License.
