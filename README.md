@@ -1,10 +1,10 @@
-# 🛡️ GenShield On-Chain Intelligent Auditor
+# GenShield On-Chain Intelligent Auditor
 
 GenShield is an **Intelligent Contract** built on the **GenLayer** blockchain that performs decentralized, on-chain smart contract auditing. By leveraging LLM-based validator execution, GenShield reviews Python smart contracts for prompt injections, safety vulnerabilities, typing/storage errors, and sandbox violations, registers verifiable audit certificates on-chain, and provides detailed correction advice directly to developers.
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 * **On-Chain AI Consensus**: Reaches consensus across multiple LLM validator nodes to determine safety (`is_safe` boolean consensus) and rates the quality of the contract code (average numeric score consensus).
 * **Vulnerability & Fix Registry**: Stores structured vulnerability reports—including line numbers, severity levels, issue descriptions, and exact code corrections—directly in the contract storage.
@@ -14,7 +14,7 @@ GenShield is an **Intelligent Contract** built on the **GenLayer** blockchain th
 
 ---
 
-## 📊 How it Works
+## How it Works
 
 ```mermaid
 sequenceDiagram
@@ -39,7 +39,7 @@ sequenceDiagram
 
 ---
 
-## 📂 Codebase Architecture
+## Codebase Architecture
 
 ```text
 ├── contracts/
@@ -64,7 +64,7 @@ sequenceDiagram
 
 ---
 
-## 📍 Deployed Contracts
+## Deployed Contracts
 
 | Network | Chain ID | Contract Address |
 | :--- | :--- | :--- |
@@ -73,7 +73,7 @@ sequenceDiagram
 
 ---
 
-## 🛠️ Installation & Setup
+##  Installation & Setup
 
 ### Prerequisites
 * Python `3.13`
