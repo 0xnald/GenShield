@@ -412,7 +412,10 @@ function App() {
       addLog(`Tx Hash: ${txHash}`, "sys");
       addLog("Awaiting validator democratic consensus (LLM runs & equivalence check)...", "warning");
 
-      const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+      const receipt = await client.waitForTransactionReceipt({ 
+        hash: txHash,
+        retries: network === 'bradbury' ? 60 : 20
+      });
       addLog(`Audit transaction processed successfully on-chain! Status code: ${receipt.status || 'Success'}`, "success");
 
       addLog("Fetching Verifiable Security Certificate from contract storage...", "info");
